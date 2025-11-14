@@ -1,0 +1,261 @@
+Metadata-Version: 2.1
+Name: yapic.json
+Version: 1.9.5
+Summary: Fastest JSON encode / decode library.
+Keywords: json,fast,c,c++,cpp
+Author-email: Zoltán Vetési <vetesi.zoltan@gmail.com>
+Requires-Python: >=3.7
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: MacOS
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: C++
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Utilities
+Classifier: Typing :: Typed
+Provides-Extra: benchmark
+Requires-Dist: simplejson; extra == "benchmark"
+Requires-Dist: ujson; extra == "benchmark"
+Requires-Dist: python-rapidjson; extra == "benchmark"
+Requires-Dist: termcolor; extra == "benchmark"
+Requires-Dist: metamagic.json; extra == "benchmark"
+Requires-Dist: orjson; extra == "benchmark"
+Provides-Extra: deploy
+Requires-Dist: twine; extra == "deploy"
+Provides-Extra: test
+Requires-Dist: pytest; extra == "test"
+Project-URL: repository, https://github.com/zozzz/yapic.json
+Description-Content-Type: text/x-rst
+
+yapic.json
+===========
+
+.. image:: https://img.shields.io/github/actions/workflow/status/zozzz/yapic.json/release-linux.yml?label=linux&style=flat-square
+      :alt: GitHub Workflow Status
+      :target: https://github.com/zozzz/yapic.json
+
+.. image:: https://img.shields.io/github/actions/workflow/status/zozzz/yapic.json/release-windows.yml?label=windows&style=flat-square
+      :alt: GitHub Workflow Status
+      :target: https://github.com/zozzz/yapic.json
+
+.. image:: https://img.shields.io/github/actions/workflow/status/zozzz/yapic.json/release-macos.yml?label=macos&style=flat-square
+      :alt: GitHub Workflow Status
+      :target: https://github.com/zozzz/yapic.json
+
+.. image:: https://img.shields.io/pypi/dm/yapic.json.svg?style=flat-square
+      :alt: PyPI - Downloads
+      :target: https://pypi.org/project/yapic.json/
+
+
+``yapic.json`` is an extreamly fast json encoder / decoder package for python.
+Encoding and decoding output fully compatible with ``python.json`` package.
+
+Features
+--------
+
+*  Extreamly fast *(see benchmark results in '/benchmark' directory)*
+*  Fully compatible output with Python json package
+*  Builtin object serialization method ``__json__`` *(see below)*
+*  Strict `JSON (RFC 4627) <http://www.ietf.org/rfc/rfc4627.txt?number=4627>`_ expected: ``Infinity``, ``NaN`` (*JavaScript* compatible infinity and not a number symbols)
+*  UTF-8 encoding & decoding support
+*  Accurate float encoding & decoding
+*  ``date`` / ``datetime`` / ``time`` encondig & decoding support *(can encode subclasses)*
+*  ``uuid.UUID`` encoding support
+*  `ItemsView <https://docs.python.org/3/library/collections.abc.html#collections.abc.ItemsView>`_ encoding support
+
+   .. code-block:: python
+
+      from collections.abc import ItemsView
+
+      class MyDictGenerator(ItemsView):
+         def __iter__(self):
+            yield ("some_key", "some_value")
+            yield ("meaning_of_life", 42)
+
+      json.dumps(MyDictGenerator()) == '{"some_key":"some_value","meaning_of_life":42}'
+
+
+Requirements
+------------
+
+- Only works with Python 3.5 or greater
+- c++ 11 comaptible compiler. *(only if u want to build from source)*
+
+  Wheels provided for *windows x86/x64* and *linux x86/x64* and *osx x64*
+- On Windows you maybe need to install `Microsoft Visual C++ Redistributable <https://support.microsoft.com/en-us/topic/the-latest-supported-visual-c-downloads-2647da03-1eea-4433-9aff-95f26a218cc0>`_
+
+Windows
+~~~~~~~
+
+
+Usage
+-----
+
+Very similar that ``python.json``, let's see some example
+
+Json data to python
+
+.. code-block:: python
+
+   from yapic import json
+
+   >>> json.loads('"Hello World"')
+   "Hello World"
+
+Python object to json data
+
+.. code-block:: python
+
+   from yapic import json
+
+   >>> json.dumps("Hello World")
+   '"Hello World"'
+
+   class Point:
+      def __json__(self):
+         return {"x":1, "y":2}
+
+   >>> json.dumps(Point())
+   '{"x":1,"y":2}'
+
+Functions
+---------
+
+-  `loads <https://github.com/zozzz/yapic.json/blob/master/src/_json.pyi#L11>`_ (**s:** ``bytes``, ``str``, ``*``, **object_hook:** ``Callable[[dict], Any]]=None``, **parse_float:** ``Callable[[str], Any]]=None``, **parse_date:** ``bool=True``)
+
+   **object_hook example:**
+
+   .. code-block:: python
+
+      >>> from yapic import json
+      >>> def hook(dict_):
+      ...     if "__complex__" in dict_:
+      ...         return complex(dict_["real"], dict_["imag"])
+      ...
+      >>> json.loads('{"__complex__":true, "real":1, "imag":2}',
+      >>>     object_hook=hook)
+      (1+2j)
+
+   **parse_float example:**
+
+   .. code-block:: python
+
+      >>> from yapic import json
+      >>> from decimal import Decimal
+      >>> json.loads("1.2", parse_float=Decimal)
+      Decimal('1.2')
+
+-  `dumps <https://github.com/zozzz/yapic.json/blob/master/src/_json.pyi#L20>`_ (**obj:** ``Any``, ``*``, **default:** ``Callable[[Any], JSONT]=None``, **tojson:** ``str="__json__"``, **ensure_ascii:** ``bool=True``, **encode_datetime:** ``bool=True``) -> ``str``
+
+   **default example:**
+
+   .. code-block:: python
+
+      >>> from yapic import json
+      >>> def default_func(o):
+      ...     if isinstance(o, complex):
+      ...         return {"__complex__": True, "real": 1, "imag": 2}
+      ...
+      >>> json.dumps(1 + 2j, default=default_func)
+      '{"__complex__":true,"real":1,"imag":2}'
+
+   **tojson example:**
+
+   .. code-block:: python
+
+      >>> from yapic import json
+      >>> class Point(object):
+      ...     def __init__(self, x, y):
+      ...         self.x = x
+      ...         self.y = y
+      ...     def __json__(self):
+      ...         return {"x": self.x, "y": self.y}
+      ...
+      >>> json.dumps(Point(10, 20))
+      '{"x":10,"y":20}'
+
+-  `dumpb <https://github.com/zozzz/yapic.json/blob/master/src/_json.pyi#L50>`_ (**obj:** ``Any``, ``*``, **default:** ``Callable[[Any], JSONT]=None``, **tojson:** ``str="__json__"``, **ensure_ascii:** ``bool=True``, **encode_datetime:** ``bool=True``) -> ``bytes``
+
+   Same as ``dumps``, but this function is return ``bytes`` insted of ``str``
+
+
+
+Exceptions
+----------
+
+.. code-block:: python
+
+   import json as py_json
+
+   class JsonError(ValueError):
+      """Base exception for all json errors"""
+
+   class JsonEncodeError(JsonError):
+      """Exception for encoding errors"""
+
+   class JsonDecodeError(JsonError, py_json.JSONDecodeError):
+      """Exception for decoding errors
+
+      Can match python builtin ``json.JSONDecodeError``.
+      """
+
+   # alias for easier switch from std json lib
+   JSONDecodeError = JsonDecodeError
+
+
+Json to Python translations
+---------------------------
+
+.. csv-table::
+   :header: Json, Python
+
+   """string""", "str"
+   "42", "int"
+   "4.2, 4e2", "float (unless you specify parse_float)"
+   "Infinity", "float(""inf"")"
+   "NaN", "float(""NaN"")"
+   "true", "True"
+   "false", "False"
+   "null", "None"
+   "2000-01-01 12:34:56", "datetime without timezone"
+   "2000-01-01 12:34:56Z", "datetime with utc timezone"
+   "2000-01-01 12:34:56+0300", "datetime with custom timezone"
+   "2000-01-01", "date"
+   "10:12:34", "time without timezone"
+   "10:12:34+0300", "time with custom timezone"
+   "{...}", "dict (unless you specify object_hook)"
+   "[...]", "list"
+
+
+Python to Json translations
+---------------------------
+
+.. csv-table::
+   :header: Python, Json
+
+   "str", """..."""
+   "int(42)", "42"
+   "float(4.2), Decimal(4.2)", "4.2"
+   "float(""inf""), Decimal(""inf"")", "Infinity"
+   "float(""nan""), Decimal(""nan"")", "NaN"
+   "True", "true"
+   "False", "false"
+   "None", "null"
+   "datetime", """2000-01-01 12:34:56"", ""2000-01-01T12:34:56+0300"""
+   "date", """2000-01-01"""
+   "time", """12:34:56"", ""12:34:56+0300"""
+   "UUID", """aba04c17-6ea3-48c1-8dcd-74f0a9b79bee"""
+   "Enum", encoding `Enum.value` attribute
+   "dict, ItemsView, dataclass", "{...}"
+   "list, tuple, set, iterable", "[...]"
+

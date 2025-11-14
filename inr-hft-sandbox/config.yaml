@@ -1,0 +1,24 @@
+exchange: binance_test
+symbol: BTC-USDT
+base: BTC
+quote: USDT
+
+credentials:
+  api_key: wOCD861IQAZws3iAsGizm4yO74T1XLjjsFMmSkIbNedD1xviRUSf7Tq8OuswYzgw
+  secret: nTQhexFQvzgZYcY17j5CH6wuceoEp8I7RPq5c7dZ9uXWhIxXcqVreN81M9T98L
+
+strategy:
+  quote_size_btc: 0.00005          # ~₹45 per clip
+  max_inventory_btc: 0.0005        # 10 clips max
+  spread_bps: 10                   # 0.10 %
+  refresh_ms: 100                  # cancel/re-quote every 100 ms
+  flat_on_stop: true
+
+risk:
+  initial_cash: 1000
+  max_notional_per_order: 90
+  max_drawdown_pct: 5              # stop if 5 % lost
+
+logging:
+  level: INFO
+  microseconds: true
