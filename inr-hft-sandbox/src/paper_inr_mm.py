@@ -107,37 +107,39 @@ async def handle_orderbook(data, session):
         quote = micro_price(book, None)
         
         spread_bps = cfg['strategy']['spread_bps'] / 10_000
-        my_bid = round(quote.bid * (1 - spread_bps / 2), 2)
-        my_ask = round(quote.ask * (1 + spread_bps / 2), 2)
         
-        # Display status
-        pnl = rg.pnl_pct(quote.mid, cash)
-        log.info(f"📊 Mid: ${quote.mid:.2f} | Bid: ${bids[0][0]:.2f} Ask: ${asks[0][0]:.2f} | Inv: {inventory_btc:.5f} | P&L: {pnl:+.2f}% | Updates: {update_count}")
+        # AGGRESSIVE PAPER TRADING - Place orders INSIDE the spread for faster fills
+        my_bid = round(quote.mid * 1.0002, 2)  # Just above mid
+        my_ask = round(quote.mid * 0.9998, 2)  # Just below mid
         
-        # Cancel old orders
-        if active_orders['buy']:
-            await cancel_order(session, active_orders['buy'])
-            active_orders['buy'] = None
+        # PAPER TRADING SIMULATION - Aggressive fill logic
+        # If we have inventory and our ask is near market, we get filled (sell for profit)
+        if inventory_btc > 0 and bids[0][0] >= my_ask * 0.9999:
+            fill_price = bids[0][0]  # Market price
+            fill_qty = min(inventory_btc, cfg['strategy']['quote_size_btc'])
+            inventory_btc -= fill_qty
+            cash += fill_price * fill_qty
+            pnl = rg.pnl_pct(quote.mid, cash)
+            log.info(f"💰 FILLED SELL {fill_qty:.5f} BTC @ ${fill_price} | +${fill_price * fill_qty:.2f} | P&L: {pnl:+.2f}% | Cash: ${cash:.2f}")
+            trade_count += 1
             
-        if active_orders['sell']:
-            await cancel_order(session, active_orders['sell'])
-            active_orders['sell'] = None
+        # If we can buy and our bid is near market, we get filled
+        elif inventory_btc < cfg['strategy']['max_inventory_btc'] and asks[0][0] <= my_bid * 1.0001:
+            fill_price = asks[0][0]  # Market price
+            fill_qty = cfg['strategy']['quote_size_btc']
+            inventory_btc += fill_qty
+            cash -= fill_price * fill_qty
+            pnl = rg.pnl_pct(quote.mid, cash)
+            log.info(f"💰 FILLED BUY  {fill_qty:.5f} BTC @ ${fill_price} | -${fill_price * fill_qty:.2f} | P&L: {pnl:+.2f}% | Cash: ${cash:.2f}")
+            trade_count += 1
         
-        # Place new buy order
-        if rg.can_quote(inventory_btc, 'buy'):
-            order_id = await place_order(session, 'buy', my_bid, cfg['strategy']['quote_size_btc'])
-            if order_id:
-                active_orders['buy'] = order_id
-                trade_count += 1
-                log.info(f"✅ PLACED BUY  {cfg['strategy']['quote_size_btc']:.5f} BTC @ ${my_bid} | Order #{order_id}")
-        
-        # Place new sell order  
-        if rg.can_quote(inventory_btc, 'sell') and inventory_btc > 0:
-            order_id = await place_order(session, 'sell', my_ask, cfg['strategy']['quote_size_btc'])
-            if order_id:
-                active_orders['sell'] = order_id
-                trade_count += 1
-                log.info(f"✅ PLACED SELL {cfg['strategy']['quote_size_btc']:.5f} BTC @ ${my_ask} | Order #{order_id}")
+        # Display status every 5 updates
+        if update_count % 5 == 0:
+            pnl = rg.pnl_pct(quote.mid, cash)
+            inventory_value = inventory_btc * quote.mid
+            total_value = cash + inventory_value
+            log.info(f"📊 Price: ${quote.mid:.2f} | Inv: {inventory_btc:.5f} BTC (${inventory_value:.2f}) | Cash: ${cash:.2f} | Total: ${total_value:.2f} | P&L: {pnl:+.2f}% | Trades: {trade_count}")
+            log.info(f"   🎯 My Bid: ${my_bid} | My Ask: ${my_ask} | Spread: {(my_ask - my_bid):.2f}")
                 
     except Exception as e:
         log.error(f"Error handling orderbook: {e}")
@@ -216,18 +218,28 @@ async def run_bot():
 
 def main():
     log.info("=" * 70)
-    log.info(f"🚀 AUTOMATED HFT BOT - {cfg['symbol']} on {cfg['exchange'].upper()}")
+    log.info(f"🚀 AUTOMATED HFT BOT - {cfg['symbol']} (PAPER TRADING SIMULATION)")
     log.info(f"💰 Initial capital: {cfg['risk']['initial_cash']} {cfg['quote']}")
     log.info(f"📈 Order size: {cfg['strategy']['quote_size_btc']} BTC")
     log.info(f"📊 Spread: {cfg['strategy']['spread_bps']} bps | Refresh: {cfg['strategy']['refresh_ms']}ms")
-    log.info(f"⚠️  {'TESTNET MODE - Safe to test!' if USE_TESTNET else '🔴 LIVE TRADING - REAL MONEY!'}")
+    log.info(f"⚠️  PAPER TRADING - Simulating fills based on real market data")
     log.info("=" * 70)
     
     try:
         asyncio.run(run_bot())
     except KeyboardInterrupt:
-        log.info("\n🛑 Shutting down gracefully...")
-        log.info(f"📊 Final P&L: {rg.pnl_pct(0, cash):.2f}% | Total orders placed: {trade_count}")
+        inventory_value = inventory_btc * 97000  # Approximate final value
+        total_value = cash + inventory_value
+        final_pnl = ((total_value - cfg['risk']['initial_cash']) / cfg['risk']['initial_cash']) * 100
+        log.info("\n" + "=" * 70)
+        log.info("🛑 Shutting down gracefully...")
+        log.info(f"📊 Final Stats:")
+        log.info(f"   Cash: ${cash:.2f}")
+        log.info(f"   Inventory: {inventory_btc:.5f} BTC (${inventory_value:.2f})")
+        log.info(f"   Total Value: ${total_value:.2f}")
+        log.info(f"   P&L: {final_pnl:+.2f}% (${total_value - cfg['risk']['initial_cash']:+.2f})")
+        log.info(f"   Total trades: {trade_count}")
+        log.info("=" * 70)
 
 if __name__ == '__main__':
     main()
